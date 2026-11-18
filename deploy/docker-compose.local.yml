@@ -1,0 +1,101 @@
+name: jsherp
+
+# 群晖本地构建版（不等 GitHub Actions）
+#   docker compose -f docker-compose.local.yml build
+#   docker compose -f docker-compose.local.yml up -d
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: jsherp-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-time-zone=+08:00
+      - --max_connections=300
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: jsh_erp
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    networks:
+      - jsherp
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: jsherp-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "allkeys-lru"]
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - jsherp
+
+  backend:
+    image: jsherp-backend:local
+    build:
+      context: ./src
+      dockerfile: deploy/Dockerfile.backend
+    container_name: jsherp-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      JAVA_OPTS: "-Xms384m -Xmx768m -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/jsh_erp?useUnicode=true&characterEncoding=utf8&useCursorFetch=true&defaultFetchSize=500&allowMultiQueries=true&rewriteBatchedStatements=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: "6379"
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - ./upload:/opt/jshERP/upload
+      - ./export:/opt/jshERP/export
+      - ./tmp:/opt/tmp/tomcat
+    ports:
+      - "${BACKEND_PORT:-9999}:9999"
+    networks:
+      - jsherp
+
+  frontend:
+    image: jsherp-frontend:local
+    build:
+      context: ./src
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: jsherp-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./nginx-logs:/var/log/nginx
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    networks:
+      - jsherp
+
+networks:
+  jsherp:
+    driver: bridge

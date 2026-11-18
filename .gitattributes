@@ -1,0 +1,35 @@
+# 统一换行符处理
+# 关键：shell 脚本、Dockerfile、nginx 配置必须是 LF，
+# 否则进容器后报 /bin/sh^M: bad interpreter
+
+* text=auto eol=lf
+
+*.sh            text eol=lf
+*.bash          text eol=lf
+Dockerfile*     text eol=lf
+*.conf          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.xml           text eol=lf
+*.properties    text eol=lf
+*.sql           text eol=lf
+*.md            text eol=lf
+*.java          text eol=lf
+*.vue           text eol=lf
+*.js            text eol=lf
+
+# Windows 批处理保留 CRLF
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# 二进制
+*.jar           binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.eot           binary

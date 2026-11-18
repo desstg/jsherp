@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1
+# jshERP 后端镜像（SpringBoot 2.0.0 + JDK 8）
+# 构建上下文必须是仓库根目录：
+#   docker build -f deploy/Dockerfile.backend -t jsherp-backend:local .
+#
+# 注意：pom.xml 里 <finalName>jshERP</finalName>，产物固定是 target/jshERP.jar
+
+########################  构建阶段  ########################
+# SpringBoot 2.0.0 只兼容 JDK8，不能用 JDK11/17/21
+FROM maven:3.8.6-openjdk-8 AS build
+
+# 阿里云 Maven 镜像：国内/慢链路直连 repo1.maven.org 会出现大量
+# *.lastUpdated 失败标记导致编译中断，必须走镜像。
+# 用 COPY 而不是 heredoc —— legacy builder 下 RUN 里的 heredoc 会写出空文件。
+COPY deploy/maven-settings.xml /root/.m2/settings.xml
+
+WORKDIR /src
+
+# 源码 + assembly 描述符依赖的 docs 目录
+COPY jshERP-boot/pom.xml ./pom.xml
+COPY jshERP-boot/src ./src
+COPY jshERP-boot/docs ./docs
+
+# 不用 dependency:go-offline（它逐个探测、慢且易失败），
+# 直接 package，一次把依赖拉齐并编译
+# -Dassembly.skipAssembly=true 跳过额外打 zip
+RUN mvn -B clean package \
+      -DskipTests \
+      -Dmaven.test.skip=true \
+      -Dassembly.skipAssembly=true \
+      -Dmaven.wagon.http.retryHandler.count=5 \
+      -Dmaven.wagon.httpconnectionManager.ttlSeconds=60
+
+########################  运行阶段  ########################
+FROM eclipse-temurin:8-jre
+
+ENV TZ=Asia/Shanghai \
+    LANG=C.UTF-8 \
+    JAVA_OPTS="-Xms384m -Xmx768m -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl tzdata \
+ && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
+ && rm -rf /var/lib/apt/lists/*
+
+# 应用写盘目录（对应 application.yml 的 file.path / exportTmp / tomcat.basedir）
+RUN mkdir -p /opt/jshERP/upload /opt/jshERP/export /opt/tmp/tomcat
+
+WORKDIR /app
+COPY --from=build /src/target/jshERP.jar /app/jshERP.jar
+
+EXPOSE 9999
+
+# 探活：只判断端口是否可连。
+# 不能用 curl -f 打 /user/login —— 该接口是 POST，GET 会返回 405，curl -f 判为失败。
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
+  CMD timeout 3 bash -c '</dev/tcp/127.0.0.1/9999' || exit 1
+
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/jshERP.jar"]

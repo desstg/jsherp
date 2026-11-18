@@ -1,0 +1,109 @@
+# jshERP 群晖部署编排
+# 镜像来自 GitHub Container Registry，由 GitHub Actions 自动构建
+#   源码推送 → Actions 编译 → ghcr.io/desstg/jsherp-backend / jsherp-frontend
+#
+# 群晖上用法：
+#   cd /volume1/docker/jsherp
+#   cp .env.example .env && vi .env      # 填密码
+#   docker compose pull && docker compose up -d
+#   docker compose logs -f backend       # 首次约 40~90 秒
+#
+# 首次启动自动建库 jsh_erp 并导入 init/01-jsh_erp.sql（32 张表 + 演示数据）
+# 默认登录：租户 jsh / 用户 admin / 密码 123456 —— 上线后立刻改
+
+name: jsherp
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: jsherp-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-time-zone=+08:00
+      - --max_connections=300
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: jsh_erp
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+      # 仅在数据目录为空时执行，重装需清空 mysql-data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    networks:
+      - jsherp
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: jsherp-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "allkeys-lru"]
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - jsherp
+
+  backend:
+    # 镜像地址指向 GitHub Container Registry，由 Actions 构建发布
+    image: ghcr.io/desstg/jsherp-backend:${TAG:-latest}
+    container_name: jsherp-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      # NAS 内存有限，堆上限压到 768m
+      JAVA_OPTS: "-Xms384m -Xmx768m -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
+      # 覆盖 application.yml 中的硬编码连接串（Spring Boot 环境变量绑定）
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/jsh_erp?useUnicode=true&characterEncoding=utf8&useCursorFetch=true&defaultFetchSize=500&allowMultiQueries=true&rewriteBatchedStatements=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: "6379"
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - ./upload:/opt/jshERP/upload
+      - ./export:/opt/jshERP/export
+      - ./tmp:/opt/tmp/tomcat
+    ports:
+      # 仅排障用，不需要可整段删掉
+      - "${BACKEND_PORT:-9999}:9999"
+    networks:
+      - jsherp
+
+  frontend:
+    image: ghcr.io/desstg/jsherp-frontend:${TAG:-latest}
+    container_name: jsherp-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./nginx-logs:/var/log/nginx
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    networks:
+      - jsherp
+
+networks:
+  jsherp:
+    driver: bridge

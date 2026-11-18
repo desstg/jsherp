@@ -1,0 +1,17 @@
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <mirrors>
+    <!-- mirrorOf 用 * 而不是 central：
+         spring-boot-dependencies 会声明 repo.spring.io/{snapshot,milestone}、
+         dl.bintray.com 等已失效仓库，每个 artifact 都要先失败三次才回落，
+         整套依赖上百个，累加起来会慢几个数量级。
+         本项目依赖全是 RELEASE 版本，全部在 central，走 * 是安全的。 -->
+    <mirror>
+      <id>aliyun-all</id>
+      <name>Aliyun Public (mirror everything)</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>*</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>
