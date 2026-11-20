@@ -962,7 +962,8 @@ public class DepotItemController {
             if(categoryId != null){
                 categoryList = materialService.getListByParentId(categoryId);
             }
-            String[] mpArr = mpList.split(",");
+            // mpList 为可选参数，App 端不传时会直接 NPE，这里必须判空
+            String[] mpArr = StringUtil.isNotEmpty(mpList) ? mpList.split(",") : new String[]{};
             List<DepotItemStockWarningCount> list = depotItemService.findStockWarningCount((currentPage-1)*pageSize, pageSize, materialParam, depotList, categoryList);
             //存放数据json数组
             if (null != list) {
@@ -972,10 +973,10 @@ public class DepotItemController {
                     diEx.setMOtherField2(disw.getMOtherField2());
                     diEx.setMOtherField3(disw.getMOtherField3());
                     disw.setMaterialUnit(getUName(disw.getMaterialUnit(), disw.getUnitName()));
-                    if(null!=disw.getLowSafeStock() && disw.getCurrentNumber().compareTo(disw.getLowSafeStock())<0) {
+                    if(null!=disw.getLowSafeStock() && null!=disw.getCurrentNumber() && disw.getCurrentNumber().compareTo(disw.getLowSafeStock())<0) {
                         disw.setLowCritical(disw.getLowSafeStock().subtract(disw.getCurrentNumber()));
                     }
-                    if(null!=disw.getHighSafeStock() && disw.getCurrentNumber().compareTo(disw.getHighSafeStock())>0) {
+                    if(null!=disw.getHighSafeStock() && null!=disw.getCurrentNumber() && disw.getCurrentNumber().compareTo(disw.getHighSafeStock())>0) {
                         disw.setHighCritical(disw.getCurrentNumber().subtract(disw.getHighSafeStock()));
                     }
                 }

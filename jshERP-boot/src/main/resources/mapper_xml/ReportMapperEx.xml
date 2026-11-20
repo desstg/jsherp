@@ -1,0 +1,902 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jsh.erp.datasource.mappers.ReportMapperEx">
+
+    <!-- ============================================================
+         高级报表数据层
+         租户隔离：TenantConfig 的 TenantSqlParser 会为每张表自动追加
+         tenant_id 条件，因此本文件不手写 tenant_id，但必须使用
+         标准表名（不带库名前缀），否则解析器无法识别。
+         ============================================================ -->
+
+    <resultMap id="ItemDetailMap" type="com.jsh.erp.datasource.vo.ReportItemDetailVo">
+        <result column="id" jdbcType="BIGINT" property="id"/>
+        <result column="billId" jdbcType="BIGINT" property="billId"/>
+        <result column="billNo" jdbcType="VARCHAR" property="billNo"/>
+        <result column="inOutItem" jdbcType="VARCHAR" property="inOutItem"/>
+        <result column="organName" jdbcType="VARCHAR" property="organName"/>
+        <result column="handsPersonName" jdbcType="VARCHAR" property="handsPersonName"/>
+        <result column="userName" jdbcType="VARCHAR" property="userName"/>
+        <result column="accountName" jdbcType="VARCHAR" property="accountName"/>
+        <result column="type" jdbcType="VARCHAR" property="type"/>
+        <result column="eachAmount" jdbcType="DECIMAL" property="eachAmount"/>
+        <result column="remark" jdbcType="VARCHAR" property="remark"/>
+        <result column="billTime" jdbcType="VARCHAR" property="billTime"/>
+        <result column="linkNumber" jdbcType="VARCHAR" property="linkNumber"/>
+    </resultMap>
+
+    <sql id="itemDetailWhere">
+        <where>
+            IFNULL(ah.delete_flag, '0') != '1'
+            <if test="beginTime != null and beginTime != ''">
+                AND ah.bill_time &gt;= #{beginTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND ah.bill_time &lt;= #{endTime}
+            </if>
+            <if test="billNo != null and billNo != ''">
+                AND ah.bill_no LIKE CONCAT('%', #{billNo}, '%')
+            </if>
+            <if test="organId != null">
+                AND ah.organ_id = #{organId}
+            </if>
+            <if test="creator != null">
+                AND ah.creator = #{creator}
+            </if>
+            <if test="handsPersonId != null">
+                AND ah.hands_person_id = #{handsPersonId}
+            </if>
+            <if test="accountId != null">
+                AND ai.account_id = #{accountId}
+            </if>
+            <if test="type != null and type != ''">
+                AND ah.type = #{type}
+            </if>
+            <if test="inOutItemId != null">
+                AND ai.in_out_item_id = #{inOutItemId}
+            </if>
+            <if test="remark != null and remark != ''">
+                AND IFNULL(ai.remark, '') LIKE CONCAT('%', #{remark}, '%')
+            </if>
+        </where>
+    </sql>
+
+    <!-- 收支项明细：单据主表 + 收支项目明细 -->
+    <select id="selectItemDetailList" resultMap="ItemDetailMap">
+        SELECT ai.id                                     AS id,
+               ah.id                                     AS billId,
+               ah.bill_no                                AS billNo,
+               ioi.name                                  AS inOutItem,
+               s.supplier                                AS organName,
+               p.name                                    AS handsPersonName,
+               u.username                                AS userName,
+               a.name                                    AS accountName,
+               ah.type                                   AS type,
+               ABS(IFNULL(ai.each_amount, 0))              AS eachAmount,
+               ai.remark                                 AS remark,
+               DATE_FORMAT(ah.bill_time, '%Y-%m-%d %H:%i:%s') AS billTime,
+               (SELECT dh.number FROM jsh_depot_head dh WHERE dh.id = ai.bill_id) AS linkNumber
+        FROM jsh_account_item ai
+        INNER JOIN jsh_account_head ah ON ah.id = ai.header_id
+        LEFT JOIN jsh_in_out_item ioi ON ioi.id = ai.in_out_item_id
+        LEFT JOIN jsh_supplier s ON s.id = ah.organ_id
+        LEFT JOIN jsh_person p ON p.id = ah.hands_person_id
+        LEFT JOIN jsh_user u ON u.id = ah.creator
+        LEFT JOIN jsh_account a ON a.id = ai.account_id
+        <include refid="itemDetailWhere"/>
+        ORDER BY ah.bill_time DESC, ai.id DESC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countItemDetail" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM jsh_account_item ai
+        INNER JOIN jsh_account_head ah ON ah.id = ai.header_id
+        <include refid="itemDetailWhere"/>
+    </select>
+
+    <resultMap id="MoneyDetailMap" type="com.jsh.erp.datasource.vo.ReportMoneyDetailVo">
+        <result column="id" jdbcType="BIGINT" property="id"/>
+        <result column="billId" jdbcType="BIGINT" property="billId"/>
+        <result column="billNo" jdbcType="VARCHAR" property="billNo"/>
+        <result column="billNumber" jdbcType="VARCHAR" property="billNumber"/>
+        <result column="type" jdbcType="VARCHAR" property="type"/>
+        <result column="organName" jdbcType="VARCHAR" property="organName"/>
+        <result column="handsPersonName" jdbcType="VARCHAR" property="handsPersonName"/>
+        <result column="userName" jdbcType="VARCHAR" property="userName"/>
+        <result column="accountName" jdbcType="VARCHAR" property="accountName"/>
+        <result column="changeAmount" jdbcType="DECIMAL" property="changeAmount"/>
+        <result column="remark" jdbcType="VARCHAR" property="remark"/>
+        <result column="billTime" jdbcType="VARCHAR" property="billTime"/>
+    </resultMap>
+
+    <sql id="moneyDetailWhere">
+        <where>
+            IFNULL(ah.delete_flag, '0') != '1'
+            <if test="beginTime != null and beginTime != ''">
+                AND ah.bill_time &gt;= #{beginTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND ah.bill_time &lt;= #{endTime}
+            </if>
+            <if test="billNo != null and billNo != ''">
+                AND ah.bill_no LIKE CONCAT('%', #{billNo}, '%')
+            </if>
+            <if test="billNumber != null and billNumber != ''">
+                AND ah.bill_no LIKE CONCAT('%', #{billNumber}, '%')
+            </if>
+            <if test="organId != null">
+                AND ah.organ_id = #{organId}
+            </if>
+            <if test="creator != null">
+                AND ah.creator = #{creator}
+            </if>
+            <if test="handsPersonId != null">
+                AND ah.hands_person_id = #{handsPersonId}
+            </if>
+            <if test="accountId != null">
+                AND ah.account_id = #{accountId}
+            </if>
+            <if test="type != null and type != ''">
+                AND ah.type = #{type}
+            </if>
+            <if test="remark != null and remark != ''">
+                AND IFNULL(ah.remark, '') LIKE CONCAT('%', #{remark}, '%')
+            </if>
+        </where>
+    </sql>
+
+    <!-- 收付款明细：金额取明细表绝对值。
+         迁移规范：主表 change_amount 统一为 0，真实金额在 jsh_account_item.each_amount，
+         且付款为负、收款为正，展示时统一取绝对值。 -->
+    <select id="selectMoneyDetailList" resultMap="MoneyDetailMap">
+        SELECT ah.id                                        AS id,
+               ah.id                                        AS billId,
+               ah.bill_no                                   AS billNo,
+               ah.bill_no                                   AS billNumber,
+               ah.type                                      AS type,
+               s.supplier                                   AS organName,
+               p.name                                       AS handsPersonName,
+               u.username                                   AS userName,
+               a.name                                       AS accountName,
+               IFNULL((SELECT ROUND(SUM(ABS(IFNULL(ai2.each_amount, 0))), 6)
+                       FROM jsh_account_item ai2
+                       WHERE ai2.header_id = ah.id
+                         AND IFNULL(ai2.delete_flag, '0') != '1'), 0) AS changeAmount,
+               ah.remark                                    AS remark,
+               DATE_FORMAT(ah.bill_time, '%Y-%m-%d %H:%i:%s') AS billTime
+        FROM jsh_account_head ah
+        LEFT JOIN jsh_supplier s ON s.id = ah.organ_id
+        LEFT JOIN jsh_person p ON p.id = ah.hands_person_id
+        LEFT JOIN jsh_user u ON u.id = ah.creator
+        LEFT JOIN jsh_account a ON a.id = ah.account_id
+        <include refid="moneyDetailWhere"/>
+        ORDER BY ah.bill_time DESC, ah.id DESC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countMoneyDetail" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM jsh_account_head ah
+        <include refid="moneyDetailWhere"/>
+    </select>
+
+    <!-- ==================== 销售占比 ==================== -->
+
+    <resultMap id="SaleRatioMap" type="com.jsh.erp.datasource.vo.ReportSaleRatioVo">
+        <result column="materialName" jdbcType="VARCHAR" property="materialName"/>
+        <result column="materialModel" jdbcType="VARCHAR" property="materialModel"/>
+        <result column="barCode" jdbcType="VARCHAR" property="barCode"/>
+        <result column="materialUnit" jdbcType="VARCHAR" property="materialUnit"/>
+        <result column="operNumber" jdbcType="DECIMAL" property="operNumber"/>
+        <result column="allPrice" jdbcType="DECIMAL" property="allPrice"/>
+        <result column="number" jdbcType="VARCHAR" property="number"/>
+        <result column="newType" jdbcType="VARCHAR" property="newType"/>
+    </resultMap>
+
+    <sql id="saleBaseWhere">
+        IFNULL(dh.delete_flag, '0') != '1'
+        AND IFNULL(di.delete_flag, '0') != '1'
+        AND dh.type = '出库'
+        AND dh.sub_type = '销售'
+        <if test="beginTime != null and beginTime != ''">
+            AND dh.oper_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            AND dh.oper_time &lt;= #{endTime}
+        </if>
+        <if test="organizationId != null">
+            AND dh.organ_id = #{organizationId}
+        </if>
+        <if test="categoryId != null">
+            AND m.category_id = #{categoryId}
+        </if>
+    </sql>
+
+    <select id="selectSaleRatioList" resultMap="SaleRatioMap">
+        SELECT m.name                                   AS materialName,
+               m.model                                  AS materialModel,
+               me.bar_code                              AS barCode,
+               di.material_unit                         AS materialUnit,
+               SUM(di.oper_number)                      AS operNumber,
+               SUM(di.all_price)                        AS allPrice,
+               MAX(dh.number)                           AS number,
+               '销售'                                    AS newType
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        LEFT JOIN jsh_material_extend me ON me.id = di.material_extend_id
+        WHERE <include refid="saleBaseWhere"/>
+        GROUP BY di.material_id, m.name, m.model, me.bar_code, di.material_unit
+        ORDER BY SUM(di.all_price) DESC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countSaleRatio" resultType="java.lang.Integer">
+        SELECT COUNT(DISTINCT di.material_id)
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        WHERE <include refid="saleBaseWhere"/>
+    </select>
+
+    <select id="sumSaleAmount" resultType="java.math.BigDecimal">
+        SELECT IFNULL(SUM(di.all_price), 0)
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        WHERE <include refid="saleBaseWhere"/>
+    </select>
+
+    <!-- ==================== 销售排行 ==================== -->
+
+    <resultMap id="SaleSortMap" type="com.jsh.erp.datasource.vo.ReportSaleSortVo">
+        <result column="materialId" jdbcType="BIGINT" property="materialId"/>
+        <result column="materialName" jdbcType="VARCHAR" property="materialName"/>
+        <result column="materialModel" jdbcType="VARCHAR" property="materialModel"/>
+        <result column="barCode" jdbcType="VARCHAR" property="barCode"/>
+        <result column="materialUnit" jdbcType="VARCHAR" property="materialUnit"/>
+        <result column="operNumber" jdbcType="DECIMAL" property="operNumber"/>
+        <result column="allPrice" jdbcType="DECIMAL" property="allPrice"/>
+        <result column="number" jdbcType="VARCHAR" property="number"/>
+        <result column="newType" jdbcType="VARCHAR" property="newType"/>
+    </resultMap>
+
+    <sql id="saleSortWhere">
+        IFNULL(dh.delete_flag, '0') != '1'
+        AND IFNULL(di.delete_flag, '0') != '1'
+        AND dh.type = '出库'
+        AND dh.sub_type = '销售'
+        <if test="beginTime != null and beginTime != ''">
+            AND dh.oper_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            AND dh.oper_time &lt;= #{endTime}
+        </if>
+        <if test="depotId != null">
+            AND di.depot_id = #{depotId}
+        </if>
+        <if test="organizationId != null">
+            AND dh.organ_id = #{organizationId}
+        </if>
+        <if test="categoryId != null">
+            AND m.category_id = #{categoryId}
+        </if>
+        <if test="creator != null">
+            AND dh.creator = #{creator}
+        </if>
+    </sql>
+
+    <select id="selectSaleSortList" resultMap="SaleSortMap">
+        SELECT di.material_id                           AS materialId,
+               m.name                                   AS materialName,
+               m.model                                  AS materialModel,
+               me.bar_code                              AS barCode,
+               di.material_unit                         AS materialUnit,
+               SUM(di.oper_number)                      AS operNumber,
+               SUM(di.all_price)                        AS allPrice,
+               MAX(dh.number)                           AS number,
+               '销售'                                    AS newType
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        LEFT JOIN jsh_material_extend me ON me.id = di.material_extend_id
+        WHERE <include refid="saleSortWhere"/>
+        GROUP BY di.material_id, m.name, m.model, me.bar_code, di.material_unit
+        <choose>
+            <when test="sortType != null and sortType == 'asc'">
+                ORDER BY SUM(di.all_price) ASC
+            </when>
+            <otherwise>
+                ORDER BY SUM(di.all_price) DESC
+            </otherwise>
+        </choose>
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countSaleSort" resultType="java.lang.Integer">
+        SELECT COUNT(DISTINCT di.material_id)
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        WHERE <include refid="saleSortWhere"/>
+    </select>
+
+    <!-- ==================== 销售利润 ==================== -->
+    <!-- 成本取商品扩展的采购价；销售价取明细 all_price，成本 = oper_number * 采购单价 -->
+
+    <resultMap id="SaleProfitMap" type="com.jsh.erp.datasource.vo.ReportSaleProfitVo">
+        <result column="id" jdbcType="BIGINT" property="id"/>
+        <result column="number" jdbcType="VARCHAR" property="number"/>
+        <result column="newType" jdbcType="VARCHAR" property="newType"/>
+        <result column="materialName" jdbcType="VARCHAR" property="materialName"/>
+        <result column="materialModel" jdbcType="VARCHAR" property="materialModel"/>
+        <result column="barCode" jdbcType="VARCHAR" property="barCode"/>
+        <result column="materialUnit" jdbcType="VARCHAR" property="materialUnit"/>
+        <result column="organName" jdbcType="VARCHAR" property="organName"/>
+        <result column="operNumber" jdbcType="DECIMAL" property="operNumber"/>
+        <result column="allPrice" jdbcType="DECIMAL" property="allPrice"/>
+        <result column="costPrice" jdbcType="DECIMAL" property="costPrice"/>
+        <result column="profitPrice" jdbcType="DECIMAL" property="profitPrice"/>
+        <result column="operTime" jdbcType="VARCHAR" property="operTime"/>
+    </resultMap>
+
+    <sql id="saleProfitWhere">
+        IFNULL(dh.delete_flag, '0') != '1'
+        AND IFNULL(di.delete_flag, '0') != '1'
+        AND dh.type = '出库'
+        AND dh.sub_type = '销售'
+        <if test="beginTime != null and beginTime != ''">
+            AND dh.oper_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            AND dh.oper_time &lt;= #{endTime}
+        </if>
+        <if test="categoryId != null">
+            AND m.category_id = #{categoryId}
+        </if>
+        <if test="organId != null">
+            AND dh.organ_id = #{organId}
+        </if>
+        <if test="depotId != null">
+            AND di.depot_id = #{depotId}
+        </if>
+        <if test="organizationId != null">
+            AND dh.organ_id = #{organizationId}
+        </if>
+        <if test="number != null and number != ''">
+            AND dh.number LIKE CONCAT('%', #{number}, '%')
+        </if>
+        <if test="linkNumber != null and linkNumber != ''">
+            AND IFNULL(dh.link_number, '') LIKE CONCAT('%', #{linkNumber}, '%')
+        </if>
+        <if test="materialParam != null and materialParam != ''">
+            AND (m.name LIKE CONCAT('%', #{materialParam}, '%')
+                 OR m.model LIKE CONCAT('%', #{materialParam}, '%')
+                 OR me.bar_code LIKE CONCAT('%', #{materialParam}, '%'))
+        </if>
+    </sql>
+
+    <!-- 成本口径：优先用明细自带的采购单价 purchase_unit_price，
+         缺失时回退到商品扩展档案价 purchase_decimal，再缺失按 0 计 -->
+    <sql id="saleProfitCore">
+        SELECT di.id                                                      AS id,
+               dh.number                                                  AS number,
+               '销售'                                                      AS newType,
+               m.name                                                     AS materialName,
+               m.model                                                    AS materialModel,
+               me.bar_code                                                AS barCode,
+               di.material_unit                                           AS materialUnit,
+               s.supplier                                                 AS organName,
+               IFNULL(di.oper_number, 0)                                  AS operNumber,
+               IFNULL(di.all_price, 0)                                    AS allPrice,
+               IFNULL(di.oper_number, 0) *
+                 (CASE WHEN IFNULL(di.purchase_unit_price, 0) &gt; 0
+                       THEN di.purchase_unit_price
+                       ELSE IFNULL(me.purchase_decimal, 0) END)           AS costPrice,
+               IFNULL(di.all_price, 0) - IFNULL(di.oper_number, 0) *
+                 (CASE WHEN IFNULL(di.purchase_unit_price, 0) &gt; 0
+                       THEN di.purchase_unit_price
+                       ELSE IFNULL(me.purchase_decimal, 0) END)           AS profitPrice,
+               DATE_FORMAT(dh.oper_time, '%Y-%m-%d %H:%i:%s')             AS operTime
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        LEFT JOIN jsh_material_extend me ON me.id = di.material_extend_id
+        LEFT JOIN jsh_supplier s ON s.id = dh.organ_id
+        WHERE <include refid="saleProfitWhere"/>
+    </sql>
+
+    <select id="selectSaleProfitList" resultMap="SaleProfitMap">
+        <include refid="saleProfitCore"/>
+        ORDER BY dh.oper_time DESC, di.id DESC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countSaleProfit" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        LEFT JOIN jsh_material_extend me ON me.id = di.material_extend_id
+        WHERE <include refid="saleProfitWhere"/>
+    </select>
+
+    <select id="sumSaleProfit" resultMap="SaleProfitMap">
+        SELECT IFNULL(SUM(x.operNumber), 0) AS operNumber,
+               IFNULL(SUM(x.profitPrice), 0) AS profitPrice
+        FROM (
+            <include refid="saleProfitCore"/>
+        ) x
+    </select>
+
+    <!-- ==================== 利润报表 ==================== -->
+    <!-- 返回按业务类型分组的小计，Service 层再映射到 income / payment 结构 -->
+
+    <resultMap id="ProfitGroupMap" type="com.jsh.erp.datasource.vo.ReportProfitGroupVo">
+        <result column="grpType" jdbcType="VARCHAR" property="grpType"/>
+        <result column="grpSubType" jdbcType="VARCHAR" property="grpSubType"/>
+        <result column="grpPayType" jdbcType="VARCHAR" property="grpPayType"/>
+        <result column="amount" jdbcType="DECIMAL" property="amount"/>
+    </resultMap>
+
+    <!-- 注意：MySQL 8 默认 only_full_group_by，
+         SELECT 与 GROUP BY 的表达式必须完全一致，否则报 1055 错误被 catch 吞掉 -->
+    <select id="selectProfitGroup" resultMap="ProfitGroupMap">
+        SELECT dh.type                             AS grpType,
+               dh.sub_type                         AS grpSubType,
+               IFNULL(dh.pay_type, '')             AS grpPayType,
+               IFNULL(SUM(dh.total_price), 0)      AS amount
+        FROM jsh_depot_head dh
+        WHERE IFNULL(dh.delete_flag, '0') != '1'
+          AND dh.status = '1'
+        <if test="beginTime != null and beginTime != ''">
+            AND dh.oper_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            AND dh.oper_time &lt;= #{endTime}
+        </if>
+        <if test="organizationId != null">
+            AND dh.organ_id = #{organizationId}
+        </if>
+        GROUP BY dh.type, dh.sub_type, IFNULL(dh.pay_type, '')
+    </select>
+
+    <!-- 财务单据（收款/付款）按类型汇总。
+         金额必须取明细 each_amount：迁移时主表 change_amount 统一置 0，
+         真实金额在 jsh_account_item 里（与账户余额口径一致）。 -->
+    <select id="selectProfitMoneyGroup" resultMap="ProfitGroupMap">
+        SELECT ah.type                             AS grpType,
+               ah.type                             AS grpSubType,
+               ''                                  AS grpPayType,
+               IFNULL(SUM(ABS(IFNULL(ai.each_amount, 0))), 0) AS amount
+        FROM jsh_account_head ah
+        INNER JOIN jsh_account_item ai ON ai.header_id = ah.id
+             AND IFNULL(ai.delete_flag, '0') != '1'
+        WHERE IFNULL(ah.delete_flag, '0') != '1'
+          AND ah.status = '1'
+        <if test="beginTime != null and beginTime != ''">
+            AND ah.bill_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            AND ah.bill_time &lt;= #{endTime}
+        </if>
+        <if test="organizationId != null">
+            AND ah.organ_id = #{organizationId}
+        </if>
+        GROUP BY ah.type
+    </select>
+
+    <!-- ==================== 负库存统计 ==================== -->
+    <!-- 说明：current_number 为负即负库存；这是盘点后最需要关注的异常项 -->
+
+    <resultMap id="MinusStockMap" type="com.jsh.erp.datasource.vo.ReportMinusStockVo">
+        <result column="materialId" jdbcType="BIGINT" property="materialId"/>
+        <result column="depotName" jdbcType="VARCHAR" property="depotName"/>
+        <result column="materialName" jdbcType="VARCHAR" property="materialName"/>
+        <result column="materialModel" jdbcType="VARCHAR" property="materialModel"/>
+        <result column="barCode" jdbcType="VARCHAR" property="barCode"/>
+        <result column="materialUnit" jdbcType="VARCHAR" property="materialUnit"/>
+        <result column="currentNumber" jdbcType="DECIMAL" property="currentNumber"/>
+    </resultMap>
+
+    <sql id="minusStockWhere">
+        IFNULL(mcs.delete_flag, '0') != '1'
+        AND IFNULL(mcs.current_number, 0) &lt; 0
+        <if test="depotId != null">
+            AND mcs.depot_id = #{depotId}
+        </if>
+        <if test="categoryId != null">
+            AND m.category_id = #{categoryId}
+        </if>
+        <if test="barCode != null and barCode != ''">
+            AND me.bar_code LIKE CONCAT('%', #{barCode}, '%')
+        </if>
+        <if test="name != null and name != ''">
+            AND m.name LIKE CONCAT('%', #{name}, '%')
+        </if>
+        <if test="standard != null and standard != ''">
+            AND m.standard LIKE CONCAT('%', #{standard}, '%')
+        </if>
+        <if test="model != null and model != ''">
+            AND m.model LIKE CONCAT('%', #{model}, '%')
+        </if>
+    </sql>
+
+    <select id="selectMinusStockList" resultMap="MinusStockMap">
+        SELECT mcs.material_id              AS materialId,
+               d.name                       AS depotName,
+               m.name                       AS materialName,
+               m.model                      AS materialModel,
+               me.bar_code                  AS barCode,
+               m.unit                       AS materialUnit,
+               mcs.current_number           AS currentNumber
+        FROM jsh_material_current_stock mcs
+        INNER JOIN jsh_material m ON m.id = mcs.material_id
+        LEFT JOIN jsh_depot d ON d.id = mcs.depot_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id
+        WHERE <include refid="minusStockWhere"/>
+        GROUP BY mcs.id, mcs.material_id, d.name, m.name, m.model, me.bar_code, m.unit, mcs.current_number
+        ORDER BY mcs.current_number ASC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countMinusStock" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM jsh_material_current_stock mcs
+        INNER JOIN jsh_material m ON m.id = mcs.material_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id
+        WHERE <include refid="minusStockWhere"/>
+    </select>
+
+    <!-- ==================== 多属性库存 ==================== -->
+    <!-- 说明：同一商品不同 SKU 组合分别统计。sku 为空表示单规格商品 -->
+
+    <resultMap id="AttributeStockMap" type="com.jsh.erp.datasource.vo.ReportAttributeStockVo">
+        <result column="materialId" jdbcType="BIGINT" property="materialId"/>
+        <result column="materialExtendId" jdbcType="BIGINT" property="materialExtendId"/>
+        <result column="depotName" jdbcType="VARCHAR" property="depotName"/>
+        <result column="materialName" jdbcType="VARCHAR" property="materialName"/>
+        <result column="barCode" jdbcType="VARCHAR" property="barCode"/>
+        <result column="materialModel" jdbcType="VARCHAR" property="materialModel"/>
+        <result column="materialUnit" jdbcType="VARCHAR" property="materialUnit"/>
+        <result column="sku" jdbcType="VARCHAR" property="sku"/>
+        <result column="attribute1" jdbcType="VARCHAR" property="attribute1"/>
+        <result column="attribute2" jdbcType="VARCHAR" property="attribute2"/>
+        <result column="attribute3" jdbcType="VARCHAR" property="attribute3"/>
+        <result column="currentNumber" jdbcType="DECIMAL" property="currentNumber"/>
+        <result column="currentStockPrice" jdbcType="DECIMAL" property="currentStockPrice"/>
+    </resultMap>
+
+    <sql id="attributeStockWhere">
+        IFNULL(mcs.delete_flag, '0') != '1'
+        <if test="depotId != null">
+            AND mcs.depot_id = #{depotId}
+        </if>
+        <if test="categoryId != null">
+            AND m.category_id = #{categoryId}
+        </if>
+        <if test="brand != null and brand != ''">
+            AND m.brand LIKE CONCAT('%', #{brand}, '%')
+        </if>
+        <if test="mfrs != null and mfrs != ''">
+            AND m.mfrs LIKE CONCAT('%', #{mfrs}, '%')
+        </if>
+        <if test="materialParam != null and materialParam != ''">
+            AND (m.name LIKE CONCAT('%', #{materialParam}, '%')
+                 OR m.model LIKE CONCAT('%', #{materialParam}, '%')
+                 OR me.bar_code LIKE CONCAT('%', #{materialParam}, '%'))
+        </if>
+    </sql>
+
+    <select id="selectAttributeStockList" resultMap="AttributeStockMap">
+        SELECT mcs.material_id                                    AS materialId,
+               me.id                                              AS materialExtendId,
+               d.name                                             AS depotName,
+               m.name                                             AS materialName,
+               me.bar_code                                        AS barCode,
+               m.model                                            AS materialModel,
+               m.unit                                             AS materialUnit,
+               IFNULL(me.sku, '')                                 AS sku,
+               SUBSTRING_INDEX(IFNULL(me.sku, ''), '&amp;', 1)    AS attribute1,
+               SUBSTRING_INDEX(SUBSTRING_INDEX(IFNULL(me.sku, ''), '&amp;', 2), '&amp;', -1) AS attribute2,
+               SUBSTRING_INDEX(IFNULL(me.sku, ''), '&amp;', -1)   AS attribute3,
+               mcs.current_number                                 AS currentNumber,
+               mcs.current_number * IFNULL(mcs.current_unit_price, 0) AS currentStockPrice
+        FROM jsh_material_current_stock mcs
+        INNER JOIN jsh_material m ON m.id = mcs.material_id
+        LEFT JOIN jsh_depot d ON d.id = mcs.depot_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id AND IFNULL(me.default_flag, '') = '1'
+        WHERE <include refid="attributeStockWhere"/>
+        ORDER BY m.name ASC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countAttributeStock" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM jsh_material_current_stock mcs
+        INNER JOIN jsh_material m ON m.id = mcs.material_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id AND IFNULL(me.default_flag, '') = '1'
+        WHERE <include refid="attributeStockWhere"/>
+    </select>
+
+    <select id="sumAttributeStock" resultMap="AttributeStockMap">
+        SELECT IFNULL(SUM(mcs.current_number), 0) AS currentNumber,
+               IFNULL(SUM(mcs.current_number * IFNULL(mcs.current_unit_price, 0)), 0) AS currentStockPrice
+        FROM jsh_material_current_stock mcs
+        INNER JOIN jsh_material m ON m.id = mcs.material_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id AND IFNULL(me.default_flag, '') = '1'
+        WHERE <include refid="attributeStockWhere"/>
+    </select>
+
+    <!-- ==================== 序列号统计 ==================== -->
+
+    <resultMap id="SerialNumberMap" type="com.jsh.erp.datasource.vo.ReportSerialNumberVo">
+        <result column="id" jdbcType="BIGINT" property="id"/>
+        <result column="materialId" jdbcType="BIGINT" property="materialId"/>
+        <result column="materialName" jdbcType="VARCHAR" property="materialName"/>
+        <result column="barCode" jdbcType="VARCHAR" property="barCode"/>
+        <result column="materialModel" jdbcType="VARCHAR" property="materialModel"/>
+        <result column="depotName" jdbcType="VARCHAR" property="depotName"/>
+        <result column="serialNumber" jdbcType="VARCHAR" property="serialNumber"/>
+        <result column="isSell" jdbcType="VARCHAR" property="isSell"/>
+        <result column="inPrice" jdbcType="DECIMAL" property="inPrice"/>
+        <result column="inBillNo" jdbcType="VARCHAR" property="inBillNo"/>
+        <result column="outBillNo" jdbcType="VARCHAR" property="outBillNo"/>
+        <result column="remark" jdbcType="VARCHAR" property="remark"/>
+    </resultMap>
+
+    <sql id="serialNumberWhere">
+        IFNULL(sn.delete_flag, '0') != '1'
+        <if test="categoryId != null">
+            AND m.category_id = #{categoryId}
+        </if>
+        <if test="serialNumber != null and serialNumber != ''">
+            AND sn.serial_number LIKE CONCAT('%', #{serialNumber}, '%')
+        </if>
+        <if test="isSell != null and isSell != ''">
+            AND sn.is_sell = #{isSell}
+        </if>
+        <if test="depotId != null">
+            AND sn.depot_id = #{depotId}
+        </if>
+        <if test="billNo != null and billNo != ''">
+            AND (IFNULL(sn.in_bill_no, '') LIKE CONCAT('%', #{billNo}, '%')
+                 OR IFNULL(sn.out_bill_no, '') LIKE CONCAT('%', #{billNo}, '%'))
+        </if>
+        <if test="materialParam != null and materialParam != ''">
+            AND (m.name LIKE CONCAT('%', #{materialParam}, '%')
+                 OR m.model LIKE CONCAT('%', #{materialParam}, '%')
+                 OR me.bar_code LIKE CONCAT('%', #{materialParam}, '%'))
+        </if>
+    </sql>
+
+    <select id="selectSerialNumberList" resultMap="SerialNumberMap">
+        SELECT sn.id                              AS id,
+               sn.material_id                     AS materialId,
+               m.name                             AS materialName,
+               me.bar_code                        AS barCode,
+               m.model                            AS materialModel,
+               d.name                             AS depotName,
+               sn.serial_number                   AS serialNumber,
+               sn.is_sell                         AS isSell,
+               sn.in_price                        AS inPrice,
+               sn.in_bill_no                      AS inBillNo,
+               sn.out_bill_no                     AS outBillNo,
+               sn.remark                          AS remark
+        FROM jsh_serial_number sn
+        INNER JOIN jsh_material m ON m.id = sn.material_id
+        LEFT JOIN jsh_depot d ON d.id = sn.depot_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id AND IFNULL(me.default_flag, '') = '1'
+        WHERE <include refid="serialNumberWhere"/>
+        ORDER BY sn.id DESC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countSerialNumber" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM jsh_serial_number sn
+        INNER JOIN jsh_material m ON m.id = sn.material_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id AND IFNULL(me.default_flag, '') = '1'
+        WHERE <include refid="serialNumberWhere"/>
+    </select>
+
+    <select id="sumSerialNumberPrice" resultType="java.math.BigDecimal">
+        SELECT IFNULL(SUM(sn.in_price), 0)
+        FROM jsh_serial_number sn
+        INNER JOIN jsh_material m ON m.id = sn.material_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id AND IFNULL(me.default_flag, '') = '1'
+        WHERE <include refid="serialNumberWhere"/>
+    </select>
+
+    <!-- ==================== 批次库存 ==================== -->
+    <!-- 说明：按批次号汇总入库-出库净数量。expireFlag 用于到期筛选 -->
+
+    <resultMap id="BatchStockMap" type="com.jsh.erp.datasource.vo.ReportBatchStockVo">
+        <result column="materialId" jdbcType="BIGINT" property="materialId"/>
+        <result column="materialName" jdbcType="VARCHAR" property="materialName"/>
+        <result column="barCode" jdbcType="VARCHAR" property="barCode"/>
+        <result column="materialModel" jdbcType="VARCHAR" property="materialModel"/>
+        <result column="depotName" jdbcType="VARCHAR" property="depotName"/>
+        <result column="batchNumber" jdbcType="VARCHAR" property="batchNumber"/>
+        <result column="expirationDate" jdbcType="VARCHAR" property="expirationDate"/>
+        <result column="operNumber" jdbcType="DECIMAL" property="operNumber"/>
+        <result column="allPrice" jdbcType="DECIMAL" property="allPrice"/>
+    </resultMap>
+
+    <sql id="batchStockCore">
+        SELECT di.material_id                       AS materialId,
+               m.name                               AS materialName,
+               me.bar_code                          AS barCode,
+               m.model                              AS materialModel,
+               d.name                               AS depotName,
+               di.batch_number                      AS batchNumber,
+               DATE_FORMAT(MAX(di.expiration_date), '%Y-%m-%d') AS expirationDate,
+               SUM(CASE WHEN dh.type = '入库' THEN di.oper_number ELSE -di.oper_number END) AS operNumber,
+               SUM(CASE WHEN dh.type = '入库' THEN di.all_price ELSE -di.all_price END)     AS allPrice
+        FROM jsh_depot_item di
+        INNER JOIN jsh_depot_head dh ON dh.id = di.header_id
+        INNER JOIN jsh_material m ON m.id = di.material_id
+        LEFT JOIN jsh_depot d ON d.id = di.depot_id
+        LEFT JOIN jsh_material_extend me ON me.material_id = m.id AND IFNULL(me.default_flag, '') = '1'
+        WHERE IFNULL(di.delete_flag, '0') != '1'
+          AND IFNULL(dh.delete_flag, '0') != '1'
+          AND dh.status = '1'
+          AND IFNULL(di.batch_number, '') != ''
+          <if test="categoryId != null">
+              AND m.category_id = #{categoryId}
+          </if>
+          <if test="depotId != null">
+              AND di.depot_id = #{depotId}
+          </if>
+          <if test="materialParam != null and materialParam != ''">
+              AND (m.name LIKE CONCAT('%', #{materialParam}, '%')
+                   OR m.model LIKE CONCAT('%', #{materialParam}, '%')
+                   OR me.bar_code LIKE CONCAT('%', #{materialParam}, '%')
+                   OR di.batch_number LIKE CONCAT('%', #{materialParam}, '%'))
+          </if>
+          <if test="expireFlag != null">
+              <choose>
+                  <when test="expireFlag == 1">
+                      AND di.expiration_date IS NOT NULL
+                      AND di.expiration_date &lt; NOW()
+                  </when>
+                  <when test="expireFlag == 0">
+                      AND (di.expiration_date IS NULL OR di.expiration_date &gt;= NOW())
+                  </when>
+                  <otherwise>
+                      AND di.expiration_date IS NOT NULL
+                      AND di.expiration_date &gt;= NOW()
+                      AND di.expiration_date &lt;= DATE_ADD(NOW(), INTERVAL #{expireFlag} DAY)
+                  </otherwise>
+              </choose>
+          </if>
+        GROUP BY di.material_id, m.name, me.bar_code, m.model, d.name, di.batch_number
+    </sql>
+
+    <select id="selectBatchStockList" resultMap="BatchStockMap">
+        SELECT x.* FROM (
+            <include refid="batchStockCore"/>
+        ) x
+        ORDER BY x.expirationDate ASC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countBatchStock" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM (
+            <include refid="batchStockCore"/>
+        ) x
+    </select>
+
+    <select id="sumBatchStock" resultMap="BatchStockMap">
+        SELECT IFNULL(SUM(x.operNumber), 0) AS operNumber,
+               IFNULL(SUM(x.allPrice), 0)   AS allPrice
+        FROM (
+            <include refid="batchStockCore"/>
+        ) x
+    </select>
+
+    <!-- ==================== 业绩提成 ==================== -->
+    <!-- 说明：按销售员汇总业务单据与财务单据。sales_man 存的是姓名文本 -->
+
+    <resultMap id="CommisionMap" type="com.jsh.erp.datasource.vo.ReportCommisionVo">
+        <result column="billId" jdbcType="BIGINT" property="billId"/>
+        <result column="number" jdbcType="VARCHAR" property="number"/>
+        <result column="fromType" jdbcType="VARCHAR" property="fromType"/>
+        <result column="billType" jdbcType="VARCHAR" property="billType"/>
+        <result column="salesMan" jdbcType="VARCHAR" property="salesMan"/>
+        <result column="organName" jdbcType="VARCHAR" property="organName"/>
+        <result column="allPrice" jdbcType="DECIMAL" property="allPrice"/>
+    </resultMap>
+
+    <sql id="commisionUnion">
+        SELECT dh.id                        AS billId,
+               dh.number                    AS number,
+               'bill'                       AS fromType,
+               dh.sub_type                  AS billType,
+               dh.sales_man                 AS salesMan,
+               s.supplier                   AS organName,
+               IFNULL(dh.total_price, 0)    AS allPrice,
+               dh.oper_time                 AS sortTime
+        FROM jsh_depot_head dh
+        LEFT JOIN jsh_supplier s ON s.id = dh.organ_id
+        WHERE IFNULL(dh.delete_flag, '0') != '1'
+          AND dh.status = '1'
+          AND IFNULL(dh.sales_man, '') != ''
+          <if test="beginTime != null and beginTime != ''">
+              AND dh.oper_time &gt;= #{beginTime}
+          </if>
+          <if test="endTime != null and endTime != ''">
+              AND dh.oper_time &lt;= #{endTime}
+          </if>
+          <if test="salesMan != null and salesMan != ''">
+              AND dh.sales_man = #{salesMan}
+          </if>
+        UNION ALL
+        SELECT ah.id                        AS billId,
+               ah.bill_no                   AS number,
+               'financial'                  AS fromType,
+               ah.type                      AS billType,
+               ''                           AS salesMan,
+               s2.supplier                  AS organName,
+               IFNULL((SELECT ROUND(SUM(ABS(IFNULL(ai2.each_amount, 0))), 6)
+                       FROM jsh_account_item ai2
+                       WHERE ai2.header_id = ah.id
+                         AND IFNULL(ai2.delete_flag, '0') != '1'), 0) AS allPrice,
+               ah.bill_time                 AS sortTime
+        FROM jsh_account_head ah
+        LEFT JOIN jsh_supplier s2 ON s2.id = ah.organ_id
+        WHERE IFNULL(ah.delete_flag, '0') != '1'
+          AND ah.status = '1'
+          <!-- 财务单据没有销售员字段：仅在未按销售员筛选时才纳入，
+               否则按销售员查询时会把无关的收付款也带出来 -->
+          <if test="salesMan == null or salesMan == ''">
+              AND 1 = 1
+          </if>
+          <if test="salesMan != null and salesMan != ''">
+              AND 1 = 2
+          </if>
+          <if test="beginTime != null and beginTime != ''">
+              AND ah.bill_time &gt;= #{beginTime}
+          </if>
+          <if test="endTime != null and endTime != ''">
+              AND ah.bill_time &lt;= #{endTime}
+          </if>
+    </sql>
+
+    <select id="selectCommisionList" resultMap="CommisionMap">
+        SELECT x.billId, x.number, x.fromType, x.billType, x.salesMan, x.organName, x.allPrice
+        FROM (
+            <include refid="commisionUnion"/>
+        ) x
+        ORDER BY x.sortTime DESC
+        <if test="offset != null and rows != null">
+            LIMIT #{offset}, #{rows}
+        </if>
+    </select>
+
+    <select id="countCommision" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM (
+            <include refid="commisionUnion"/>
+        ) x
+    </select>
+
+</mapper>

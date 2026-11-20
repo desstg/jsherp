@@ -1,0 +1,140 @@
+package com.jsh.erp.datasource.vo;
+
+import java.math.BigDecimal;
+
+/**
+ * 高级报表-收支项明细
+ * 对应 App 页面 pages_report/plugins/itemDetail.vue
+ */
+public class ReportItemDetailVo {
+
+    private Long id;
+    /** 单据主键（用于跳转单据详情） */
+    private Long billId;
+    /** 单据编号 */
+    private String billNo;
+    /** 收支项目 */
+    private String inOutItem;
+    /** 关联单位 */
+    private String organName;
+    /** 经手人 */
+    private String handsPersonName;
+    /** 制单人 */
+    private String userName;
+    /** 账户名称 */
+    private String accountName;
+    /** 类型：收入/支出 */
+    private String type;
+    /** 金额 */
+    private BigDecimal eachAmount;
+    /** 备注 */
+    private String remark;
+    /** 单据日期 */
+    private String billTime;
+    /** 关联单据编号 */
+    private String linkNumber;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Long getBillId() {
+        return billId;
+    }
+
+    public void setBillId(Long billId) {
+        this.billId = billId;
+    }
+
+    public String getBillNo() {
+        return billNo;
+    }
+
+    public void setBillNo(String billNo) {
+        this.billNo = billNo;
+    }
+
+    public String getInOutItem() {
+        return inOutItem;
+    }
+
+    public void setInOutItem(String inOutItem) {
+        this.inOutItem = inOutItem;
+    }
+
+    public String getOrganName() {
+        return organName;
+    }
+
+    public void setOrganName(String organName) {
+        this.organName = organName;
+    }
+
+    public String getHandsPersonName() {
+        return handsPersonName;
+    }
+
+    public void setHandsPersonName(String handsPersonName) {
+        this.handsPersonName = handsPersonName;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
+    }
+
+    public String getAccountName() {
+        return accountName;
+    }
+
+    public void setAccountName(String accountName) {
+        this.accountName = accountName;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public BigDecimal getEachAmount() {
+        return eachAmount;
+    }
+
+    public void setEachAmount(BigDecimal eachAmount) {
+        this.eachAmount = eachAmount;
+    }
+
+    public String getRemark() {
+        return remark;
+    }
+
+    public void setRemark(String remark) {
+        this.remark = remark;
+    }
+
+    public String getBillTime() {
+        return billTime;
+    }
+
+    public void setBillTime(String billTime) {
+        this.billTime = billTime;
+    }
+
+    public String getLinkNumber() {
+        return linkNumber;
+    }
+
+    public void setLinkNumber(String linkNumber) {
+        this.linkNumber = linkNumber;
+    }
+}
